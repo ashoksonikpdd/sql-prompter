@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Query Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #f8f9fa;
+            border-left: 1px solid #dee2e6;
+            border-right: 1px solid #dee2e6;
+        }
+        
+        .chat-header {
+            padding: 1rem;
+            background-color: #0d6efd;
+            color: white;
+            font-size: 1.25rem;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .collection-selector {
+            background-color: white;
+            color: #0d6efd;
+            border: none;
+            border-radius: 4px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            max-width: 80%;
+            position: relative;
+        }
+        
+        .message-user {
+            margin-left: auto;
+            background-color: #0d6efd;
+            color: white;
+            border-radius: 1rem 1rem 0 1rem;
+            padding: 0.75rem 1rem;
+        }
+        
+        .message-bot {
+            margin-right: auto;
+            background-color: #e9ecef;
+            border-radius: 1rem 1rem 1rem 0;
+            padding: 0.75rem 1rem;
+        }
+        
+        .typing-indicator {
+            display: none;
+            margin: 1rem 0;
+            padding: 0.5rem 1rem;
+        }
+        
+        .chat-input-container {
+            padding: 1rem;
+            border-top: 1px solid #dee2e6;
+            background-color: white;
+        }
+        
+        .query-input {
+            border-radius: 1.5rem;
+            padding: 0.75rem 1.25rem;
+            border: 1px solid #ced4da;
+            resize: none;
+        }
+        
+        .btn-send {
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-send:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .message-time {
+            font-size: 0.75rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+            text-align: right;
+        }
+        
+        .chat-input {
+            display: flex;
+            padding: 1rem;
+            background-color: white;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        #userInput {
+            flex: 1;
+            border-radius: 1.5rem;
+            padding: 0.5rem 1rem;
+            border: 1px solid #ced4da;
+            margin-right: 0.5rem;
+            resize: none;
+            overflow-y: hidden;
+            min-height: 40px;
+            max-height: 150px;
+        }
+        
+        #sendButton {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: none;
+            background-color: #0d6efd;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        
+        #sendButton:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .scroll-to-bottom {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #0d6efd;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .scroll-to-bottom:hover {
+            opacity: 1;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            padding: 0.5rem 1rem;
+        }
+        
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            background-color: #6c757d;
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        
+        .typing-indicator span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+        
+        .query-examples {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        
+        .example-query {
+            background-color: #e9ecef;
+            border-radius: 1rem;
+            padding: 0.25rem 0.75rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .example-query:hover {
+            background-color: #dee2e6;
+        }
+        
+        .example-query-highlight {
+            animation: highlight 1s;
+        }
+        
+        @keyframes highlight {
+            0% { background-color: rgba(13, 110, 253, 0.2); }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div>
+                <i class="fas fa-robot me-2"></i>Employee Query Assistant
+            </div>
+            <select id="collectionSelect" class="collection-selector">
+                <option value="">Loading collections...</option>
+            </select>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message message-bot">
+                <div class="message-content">
+                    <p>Hello! I'm your Employee Query Assistant. Please select a collection and ask me anything about your data.</p>
+                    <p class="mb-2">Try asking something like:</p>
+                    <div class="query-examples">
+                        <div class="example-query">Show employees</div>
+                        <div class="example-query">Recent hires</div>
+                        <div class="example-query">Department stats</div>
+                        <div class="example-query">Top earners</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="queryInput" 
+                    class="form-control query-input" 
+                    placeholder="Type your query here..." 
+                    autocomplete="off"
+                    aria-label="Type your query"
+                >
+                <button class="btn btn-primary btn-send ms-2" id="sendButton" aria-label="Send message">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Scroll to bottom button -->
+        <div id="scrollToBottom" class="scroll-to-bottom hidden" title="Scroll to bottom">
+            <i class="fas fa-chevron-down"></i>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let collections = [];
+        let selectedCollection = '';
+
+        // DOM elements
+        const chatMessages = document.getElementById('chatMessages');
+        const queryInput = document.getElementById('queryInput');
+        const sendButton = document.getElementById('sendButton');
+        const collectionSelect = document.getElementById('collectionSelect');
+
+        // Initialize the application
+        async function init() {
+            await loadCollections();
+            setupEventListeners();
+            
+            // Add click handlers for example queries
+            document.querySelectorAll('.example-query').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    queryInput.value = e.target.textContent;
+                    queryInput.focus();
+                });
+            });
+        }
+
+        // Load available collections
+        async function loadCollections() {
+            try {
+                const response = await fetch('http://localhost:8080/api/schema/tables', {
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'same-origin' // This is important for cookies, authorization headers with HTTPS
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                collections = await response.json();
+                
+                // Update collection dropdown
+                const collectionSelect = document.getElementById('collectionSelect');
+                collectionSelect.innerHTML = '<option value="">Select a collection...</option>';
+                
+                if (collections && collections.length > 0) {
+                    collections.forEach(collection => {
+                        const option = document.createElement('option');
+                        option.value = collection;
+                        option.textContent = collection;
+                        collectionSelect.appendChild(option);
+                    });
+                    
+                    // Select the first collection by default
+                    collectionSelect.value = collections[0];
+                    selectedCollection = collections[0];
+                } else {
+                    // If no collections found, show a message
+                    addMessage('bot', 'No collections found in the database.');
+                }
+            } catch (error) {
+                console.error('Error loading collections:', error);
+                addMessage('bot', 'Error loading collections. Please refresh the page to try again.');
+            }
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            // Send message on button click
+            sendButton.addEventListener('click', sendMessage);
+            
+            // Send message on Enter key
+            queryInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Handle collection selection
+            collectionSelect.addEventListener('change', (e) => {
+                selectedCollection = e.target.value;
+                if (selectedCollection) {
+                    addMessage('bot', `Selected collection: <strong>${selectedCollection}</strong>`, true);
+                }
+            });
+            
+            // Handle scroll to bottom button
+            document.getElementById('scrollToBottom').addEventListener('click', () => {
+                scrollToBottom();
+            });
+        }
+
+        // Send message to the server
+        async function sendMessage() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+            
+            if (!selectedCollection) {
+                addMessage('bot', 'Please select a collection first.');
+                return;
+            }
+
+            // Add user message to chat
+            addMessage('user', query);
+            queryInput.value = '';
+            
+            // Show typing indicator
+            const typingId = showTypingIndicator();
+            
+            try {
+                // Send query to the server
+                const requestBody = JSON.stringify({
+                    query: query,
+                    collection: selectedCollection
+                });
+                
+                const response = await fetch('http://localhost:8080/api/query/nlq', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: requestBody,
+                    credentials: 'same-origin'
+                });
+                
+                // Hide typing indicator
+                hideTypingIndicator(typingId);
+                
+                if (!response.ok) {
+                    throw new Error(`Server responded with status: ${response.status}`);
+                }
+                
+                const responseData = await response.json();
+                
+                // Check if we have data in the response
+                if (responseData && responseData.data && Array.isArray(responseData.data)) {
+                    const results = responseData.data;
+                    if (results.length > 0) {
+                        const formattedResults = formatResultsAsTable(results);
+                        addMessage('bot', `Here are the results for "${query}":<br><br>${formattedResults}`, true);
+                    } else {
+                        addMessage('bot', `No results found for "${query}". Try a different query.`);
+                    }
+                } else {
+                    // If the response format is unexpected, show the raw response for debugging
+                    console.log('Unexpected response format:', responseData);
+                    addMessage('bot', `Received response but couldn't display results. Response format: ${JSON.stringify(responseData, null, 2)}`);
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                hideTypingIndicator(typingId);
+                addMessage('bot', `Sorry, there was an error processing your query: ${error.message}`);
+            }
+        }
+
+        // Add a message to the chat
+        function addMessage(sender, content, isHtml = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${sender}`;
+            
+            if (isHtml) {
+                messageDiv.innerHTML = content;
+            } else {
+                messageDiv.textContent = content;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            const typingId = 'typing-' + Date.now();
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'typing-indicator message-bot';
+            typingDiv.id = typingId;
+            typingDiv.innerHTML = '<i class="fas fa-ellipsis-h"></i>';
+            chatMessages.appendChild(typingDiv);
+            scrollToBottom();
+            return typingId;
+        }
+
+        // Hide typing indicator
+        function hideTypingIndicator(id) {
+            const typingElement = document.getElementById(id);
+            if (typingElement) {
+                typingElement.remove();
+            }
+        }
+
+        // Format results as an HTML table
+        function formatResultsAsTable(results) {
+            if (!results || results.length === 0) return 'No results found.';
+            
+            const headers = Object.keys(results[0]);
+            let html = '<div class="table-responsive"><table class="table table-sm table-bordered">';
+            
+            // Table header
+            html += '<thead><tr>';
+            headers.forEach(header => {
+                html += `<th>${header}</th>`;
+            });
+            html += '</tr></thead>';
+            
+            // Table body
+            html += '<tbody>';
+            results.forEach(row => {
+                html += '<tr>';
+                headers.forEach(header => {
+                    const value = row[header];
+                    let displayValue = value;
+                    
+                    if (value === null || value === undefined) {
+                        displayValue = 'null';
+                    } else if (typeof value === 'object') {
+                        displayValue = JSON.stringify(value);
+                    }
+                    
+                    html += `<td>${displayValue}</td>`;
+                });
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            
+            return html;
+        }
+
+        // Scroll to the bottom of the chat
+        function scrollToBottom() {
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Initialize the app when the page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

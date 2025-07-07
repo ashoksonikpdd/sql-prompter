@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL Query Assistant</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Your existing CSS styles here */
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <i class="fas fa-robot"></i>
+            <span>SQL Query Assistant</span>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <!-- Welcome message -->
+            <div class="message message-bot">
+                <div class="message-content">
+                    <p>Hello! I'm your SQL Query Assistant. Ask me to run queries or help with database questions.</p>
+                    <p class="mb-2">Try asking something like:</p>
+                    <div class="query-examples">
+                        <div class="example-query" onclick="insertExampleQuery('Show me all employees')">Show employees</div>
+                        <div class="example-query" onclick="insertExampleQuery('Find employees who joined this year')">Recent hires</div>
+                        <div class="example-query" onclick="insertExampleQuery('List departments and their employee count')">Department stats</div>
+                        <div class="example-query" onclick="insertExampleQuery('Show highest paid employees')">Top earners</div>
+                    </div>
+                </div>
+                <div class="message-time">Just now</div>
+            </div>
+        </div>
+        
+        <div class="chat-input">
+            <input type="text" id="userInput" 
+                   class="form-control"
+                   placeholder="Type your query here..." 
+                   onkeydown="handleKeyDown(event)"
+                   aria-label="Type your query">
+            <button id="sendButton" onclick="sendMessage()" aria-label="Send message">
+                <i class="fas fa-paper-plane"></i>
+            </button>
+        </div>
+        
+        <!-- Scroll to bottom button -->
+        <div id="scrollToBottom" class="scroll-to-bottom hidden" onclick="scrollToBottom(true)" title="Scroll to bottom">
+            <i class="fas fa-chevron-down"></i>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Configuration
+        const CONFIG = {
+            API_BASE_URL: 'http://localhost:8080/api',
+            MAX_ROWS: 100,
+            REQUEST_TIMEOUT: 30000,
+            TYPING_INDICATOR_DELAY: 300,
+            MESSAGE_ANIMATION_DURATION: 200,
+            SCROLL_DEBOUNCE_DELAY: 100
+        };
+        
+        // App state
+        const state = {
+            isTyping: false,
+            scrollBottomButtonVisible: false,
+            lastScrollPosition: 0,
+            messageHistory: [],
+            currentHistoryIndex: -1,
+            typingIndicatorTimeout: null,
+            sessionId: null
+        };
+
+        // Initialize chat when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            const userInput = document.getElementById('userInput');
+            userInput.focus();
+            setupEventListeners();
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.addEventListener('scroll', handleScroll);
+            checkScrollPosition();
+        });
+        
+        function setupEventListeners() {
+            const userInput = document.getElementById('userInput');
+            const sendButton = document.getElementById('sendButton');
+            const chatMessages = document.getElementById('chatMessages');
+            
+            userInput.addEventListener('paste', handlePaste);
+            userInput.addEventListener('input', handleInput);
+            userInput.addEventListener('keydown', handleKeyDown);
+            sendButton.addEventListener('click', sendMessage);
+            
+            let scrollTimeout;
+            chatMessages.addEventListener('scroll', () => {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(handleScroll, CONFIG.SCROLL_DEBOUNCE_DELAY);
+            });
+            
+            window.addEventListener('resize', debounce(handleWindowResize, 200));
+            document.getElementById('scrollToBottom').addEventListener('click', () => scrollToBottom(true));
+            
+            document.querySelectorAll('.example-query').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    insertExampleQuery(btn.textContent);
+                });
+            });
+        }
+        
+        function handlePaste(e) {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+            document.execCommand('insertText', false, text);
+        }
+        
+        function handleInput(e) {
+            const input = e.target;
+            input.style.height = 'auto';
+            input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+            document.getElementById('sendButton').disabled = !input.value.trim();
+        }
+        
+        function handleKeyDown(e) {
+            const input = e.target;
+            const history = state.messageHistory;
+            
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!state.isTyping) {
+                    sendMessage();
+                }
+            }
+            else if (e.key === 'ArrowUp' && state.currentHistoryIndex > 0) {
+                e.preventDefault();
+                state.currentHistoryIndex--;
+                input.value = history[state.currentHistoryIndex];
+                setTimeout(() => {
+                    input.selectionStart = input.selectionEnd = input.value.length;
+                }, 0);
+            } 
+            else if (e.key === 'ArrowDown' && state.currentHistoryIndex < history.length - 1) {
+                e.preventDefault();
+                state.currentHistoryIndex++;
+                input.value = history[state.currentHistoryIndex] || '';
+            }
+            else if (e.key === 'Escape') {
+                input.value = '';
+                input.style.height = 'auto';
+                state.currentHistoryIndex = history.length;
+            }
+        }
+        
+        async function sendMessage() {
+            const userInput = document.getElementById('userInput');
+            const message = userInput.value.trim();
+            
+            if (!message) return;
+            
+            // Disable input and button while processing
+            userInput.disabled = true;
+            document.getElementById('sendButton').disabled = true;
+            
+            // Add user message to chat
+            addMessage('user', message);
+            userInput.value = '';
+            userInput.style.height = 'auto';
+            
+            try {
+                // Save to message history
+                state.messageHistory.push(message);
+                state.currentHistoryIndex = state.messageHistory.length;
+                
+                // Show typing indicator
+                const typingIndicator = showTypingIndicator();
+                
+                // Send to backend
+                const response = await fetchWithTimeout(
+                    `${CONFIG.API_BASE_URL}/query/ai`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            query: message,
+                            sessionId: state.sessionId || ''
+                        })
+                    },
+                    CONFIG.REQUEST_TIMEOUT
+                );
+                
+                // Remove typing indicator
+                if (typingIndicator && typingIndicator.parentNode) {
+                    typingIndicator.remove();
+                }
+                
+                const data = await response.json();
+                
+                // Handle the response
+                if (data.error) {
+                    addMessage('bot', `Error: ${data.error}`);
+                } else {
+                    addMessage('bot', data.response || 'No response from server');
+                }
+                
+                // Save session ID if provided
+                if (data.sessionId) {
+                    state.sessionId = data.sessionId;
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('bot', 'Sorry, there was an error processing your request. Please try again.');
+            } finally {
+                // Re-enable input and button
+                userInput.disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                userInput.focus();
+            }
+        }
+        
+        function addMessage(sender, content, isHtml = false) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${sender}`;
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            
+            if (isHtml) {
+                messageContent.innerHTML = content;
+            } else {
+                messageContent.textContent = content;
+            }
+            
+            const messageTime = document.createElement('div');
+            messageTime.className = 'message-time';
+            messageTime.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            messageDiv.appendChild(messageContent);
+            messageDiv.appendChild(messageTime);
+            chatMessages.appendChild(messageDiv);
+            
+            scrollToBottom();
+        }
+        
+        function showTypingIndicator() {
+            const chatMessages = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message message-bot';
+            typingDiv.id = 'typingIndicator';
+            
+            const typingContent = document.createElement('div');
+            typingContent.className = 'typing-indicator';
+            typingContent.innerHTML = '<span></span><span></span><span></span>';
+            
+            typingDiv.appendChild(typingContent);
+            chatMessages.appendChild(typingDiv);
+            scrollToBottom();
+            
+            return typingDiv;
+        }
+        
+        function scrollToBottom(force = false) {
+            const chatMessages = document.getElementById('chatMessages');
+            if (chatMessages) {
+                const isNearBottom = chatMessages.scrollTop + chatMessages.clientHeight > chatMessages.scrollHeight - 100;
+                if (isNearBottom || force) {
+                    chatMessages.scrollTo({
+                        top: chatMessages.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }
+            }
+            checkScrollPosition();
+        }
+        
+        function handleScroll() {
+            checkScrollPosition();
+        }
+        
+        function checkScrollPosition() {
+            const chatMessages = document.getElementById('chatMessages');
+            const scrollButton = document.getElementById('scrollToBottom');
+            
+            if (!chatMessages || !scrollButton) return;
+            
+            const isAtBottom = chatMessages.scrollTop + chatMessages.clientHeight >= chatMessages.scrollHeight - 20;
+            
+            if (!isAtBottom && !state.scrollBottomButtonVisible) {
+                scrollButton.classList.remove('hidden');
+                state.scrollBottomButtonVisible = true;
+            } else if (isAtBottom && state.scrollBottomButtonVisible) {
+                scrollButton.classList.add('hidden');
+                state.scrollBottomButtonVisible = false;
+            }
+        }
+        
+        function handleWindowResize() {
+            const chatContainer = document.querySelector('.chat-container');
+            const headerHeight = document.querySelector('.chat-header').offsetHeight;
+            const inputHeight = document.querySelector('.chat-input').offsetHeight;
+            
+            chatContainer.style.setProperty('--header-height', `${headerHeight}px`);
+            chatContainer.style.setProperty('--input-height', `${inputHeight}px`);
+            
+            scrollToBottom();
+        }
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        function insertExampleQuery(query) {
+            const input = document.getElementById('userInput');
+            input.value = query;
+            input.focus();
+            input.dispatchEvent(new Event('input'));
+            
+            input.classList.add('example-query-highlight');
+            setTimeout(() => {
+                input.classList.remove('example-query-highlight');
+            }, 1000);
+        }
+        
+        async function fetchWithTimeout(resource, options = {}, timeout = 10000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+            
+            try {
+                const response = await fetch(resource, {
+                    ...options,
+                    signal: controller.signal
+                });
+                clearTimeout(id);
+                return response;
+            } catch (error) {
+                clearTimeout(id);
+                throw error;
+            }
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                // Show success feedback
+                const tooltip = document.createElement('div');
+                tooltip.className = 'copy-tooltip';
+                tooltip.textContent = 'Copied!';
+                document.body.appendChild(tooltip);
+                
+                // Position tooltip near the cursor
+                tooltip.style.top = (event.clientY - 30) + 'px';
+                tooltip.style.left = event.clientX + 'px';
+                
+                // Remove tooltip after animation
+                setTimeout(() => {
+                    tooltip.remove();
+                }, 1000);
+                
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Exclude EI_EXPOSE_REP2 for AiQueryService -->
+    <Match>
+        <Class name="com.responsive.ai.sql_prompter.service.impl.QueryServiceImpl" />
+        <Bug pattern="EI_EXPOSE_REP2" />
+    </Match>
+    <Match>
+        <Class name="com.responsive.ai.sql_prompter.service.AiQueryService" />
+        <Bug pattern="EI_EXPOSE_REP2" />
+    </Match>
+</FindBugsFilter>

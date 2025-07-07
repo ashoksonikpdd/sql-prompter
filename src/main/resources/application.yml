@@ -1,0 +1,52 @@
+# Server configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# Application configuration
+app:
+  cors:
+    allowed-origins: http://localhost:3000
+  
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.responsive.ai.sql_prompter: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Rate limiting configuration
+rate-limit:
+  capacity: 100
+  time-window: 1m
+  tokens: 100
+  ai-query-cost: 5
+
+# Spring configuration
+spring:
+  # MongoDB configuration
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/sql_prompter
+      auto-index-creation: true
+  # AI Configuration (example - configure based on your AI provider)
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      model: gpt-3.5-turbo
+      temperature: 0.7
+      max-tokens: 1000
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+    metrics:
+      enabled: true
