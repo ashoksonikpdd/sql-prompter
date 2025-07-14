@@ -124,21 +124,22 @@ public final class AiQueryService {
     private static final String SYSTEM_PROMPT = "You are an expert MongoDB query generator that converts natural language to precise database queries. " +
             "Your task is to analyze the user's request and generate the most appropriate MongoDB find query.\n\n" +
             "RULES:\n" +
-            "1. Always return a valid JSON object with this exact structure: {\"collection\":\"collection_name\", \"query\": {}, \"limit\": 10}\n" +
+            "1. Always return a valid JSON object with this exact structure: {\"collection\":\"collection_name\", \"query\": {}, \"projection\": {}, \"limit\": 10}\n" +
             "2. The collection name must match exactly with the database collection.\n" +
             "3. The query should be a valid MongoDB find query.\n" +
-            "4. Default to case-insensitive regex searches when appropriate.\n" +
-            "5. For text searches, use the $text operator when full-text search is needed.\n" +
-            "6. Always include a reasonable limit (default to 10).\n" +
-            "7. Never include operations that modify data (insert/update/delete/drop/etc).\n" +
-            "8. If the request is unclear, make reasonable assumptions and explain in the query.\n\n" +
+            "4. Include a projection to return only the fields explicitly requested by the user.\n" +
+            "5. Default to case-insensitive regex searches when appropriate.\n" +
+            "6. For text searches, use the $text operator when full-text search is needed.\n" +
+            "7. Always include a reasonable limit (default to 10).\n" +
+            "8. Never include operations that modify data (insert/update/delete/drop/etc).\n" +
+            "9. If the request is unclear, make reasonable assumptions and explain in the query.\n\n" +
             "EXAMPLES:\n" +
             "Request: Find all employees named John\n" +
-            "Response: {\"collection\":\"employees\",\"query\":{\"name\":{\"$regex\":\"john\",\"$options\":\"i\"}},\"limit\":10}\n\n" +
+            "Response: {\"collection\":\"employees\",\"query\":{\"name\":{\"$regex\":\"john\",\"$options\":\"i\"}},\"projection\":{\"name\":1},\"limit\":10}\n\n" +
             "Request: Show me products with price less than 100\n" +
-            "Response: {\"collection\":\"products\",\"query\":{\"price\":{\"$lt\":100}},\"limit\":10}\n\n" +
+            "Response: {\"collection\":\"products\",\"query\":{\"price\":{\"$lt\":100}},\"projection\":{\"name\":1,\"price\":1},\"limit\":10}\n\n" +
             "Request: Search for documents containing 'urgent' in any field\n" +
-            "Response: {\"collection\":\"documents\",\"query\":{\"$text\":{\"$search\":\"urgent\"}},\"limit\":10}";
+            "Response: {\"collection\":\"documents\",\"query\":{\"$text\":{\"$search\":\"urgent\"}},\"projection\":{\"title\":1,\"content\":1},\"limit\":10}";
     
     /**
      * Process a natural language query, convert it to MongoDB query, execute it, and return results
@@ -571,9 +572,27 @@ public final class AiQueryService {
             // Get the limit, default to 10 if not specified
             int limit = queryDoc.getInteger("limit", 10);
             
-            // Create a basic query from the criteria document
+            // Get the projection, if specified
+            Document projectionDoc = new Document();
+            Object projectionObj = queryDoc.get("projection");
+            if (projectionObj != null) {
+                if (projectionObj instanceof Document) {
+                    projectionDoc = (Document) projectionObj;
+                } else if (projectionObj instanceof Map) {
+                    projectionDoc = new Document((Map<String, Object>) projectionObj);
+                }
+            }
+            
+            // Always include _id field if not explicitly excluded
+            if (!projectionDoc.containsKey("_id")) {
+                projectionDoc.put("_id", 1);
+            }
+            
+            log.debug("Using projection: {}", projectionDoc.toJson());
+            
+            // Create a basic query from the criteria document and apply projection
             org.springframework.data.mongodb.core.query.BasicQuery query = 
-                new org.springframework.data.mongodb.core.query.BasicQuery(criteria.toJson());
+                new org.springframework.data.mongodb.core.query.BasicQuery(criteria.toJson(), projectionDoc.toJson());
             
             // Apply limit
             query.limit(limit);
